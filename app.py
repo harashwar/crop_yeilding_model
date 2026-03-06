@@ -15,7 +15,11 @@ import requests
 import warnings
 warnings.filterwarnings('ignore')
 
+
 app = Flask(__name__)
+
+# Load model when server starts (important for Render)
+load_model()
 
 # ──────────────────────────────────────────────────────────
 # Load model artifacts
