@@ -4,10 +4,13 @@ import joblib
 import json
 import requests
 import warnings
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 warnings.filterwarnings("ignore")
 
-app = Flask(__name__)
 
+app = Flask(__name__)
+CORS(app)
 # -------------------------
 # File paths
 # -------------------------
