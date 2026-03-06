@@ -1107,10 +1107,13 @@
       document.getElementById('temp-display').textContent = v + '°C';
     });
 
+    // ── API Base URL (deployed Render API) ──────────────────
+    const BASE_URL = 'https://crop-yielding-api.onrender.com';
+
     // ── Load metadata ────────────────────────────────────────
     async function loadMetadata() {
       try {
-        const r = await fetch('/api/metadata');
+        const r = await fetch(`${BASE_URL}/metadata`);
         if (!r.ok) return;
         const m = await r.json();
         document.getElementById('stat-r2').textContent = (m.rf_r2 * 100).toFixed(1) + '%';
@@ -1154,7 +1157,7 @@
       btn.textContent = '⏳ Fetching…';
       btn.disabled = true;
       try {
-        const r = await fetch(`/api/weather?district=${encodeURIComponent(district)}`);
+        const r = await fetch(`${BASE_URL}/weather?district=${encodeURIComponent(district)}`);
         const d = await r.json();
         const info = document.getElementById('weather-info');
         if (d.error) {
@@ -1183,29 +1186,44 @@
       err.classList.remove('visible');
       btn.classList.add('loading');
 
+      // Field names match the deployed FastAPI schema
       const payload = {
         district: document.getElementById('district').value,
-        soil_type: document.getElementById('soil_type').value,
+        Soil_Type: document.getElementById('soil_type').value,
         humidity: Number(humSlider.value),
         temperature: Number(tmpSlider.value),
-        crop_type: document.getElementById('crop_type').value,
+        crop: document.getElementById('crop_type').value,
       };
 
       try {
-        const r = await fetch('/api/predict', {
+        const r = await fetch(`${BASE_URL}/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const d = await r.json();
-        if (d.error) {
-          err.textContent = '❌ ' + d.error;
+        if (!r.ok) {
+          err.textContent = '❌ ' + (d.detail || JSON.stringify(d));
           err.classList.add('visible');
         } else {
-          showResult(d);
+          // Map FastAPI response to showResult format
+          const result = {
+            predicted_yield: d.predicted_yield,
+            quality_label: d.quality_label,
+            quality_emoji: d.quality_emoji,
+            quality_color: d.quality_label === 'Excellent' ? '#22c55e'
+              : d.quality_label === 'Good' ? '#84cc16'
+                : d.quality_label === 'Average' ? '#f59e0b' : '#ef4444',
+            confidence_low: d.confidence_low,
+            confidence_high: d.confidence_high,
+            inputs: {
+              soil_nutrients: d.inputs_used || {}
+            }
+          };
+          showResult(result);
         }
       } catch (ex) {
-        err.textContent = '❌ Could not connect to prediction server. Make sure app.py is running.';
+        err.textContent = '❌ Could not connect to the prediction API at ' + BASE_URL + '. Please try again.';
         err.classList.add('visible');
       }
       btn.classList.remove('loading');
