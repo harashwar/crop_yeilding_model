@@ -17,5 +17,3 @@ pydantic>=2.0.0
 # Utilities
 requests>=2.28.0
 openpyxl>=3.1.0
-
-git add requirements.txt
