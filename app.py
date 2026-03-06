@@ -19,6 +19,65 @@ warnings.filterwarnings('ignore')
 app = Flask(__name__)
 
 # Load model when server starts (important for Render)
+from flask import Flask, request, jsonify
+import pandas as pd
+import joblib
+import json
+import requests
+import warnings
+warnings.filterwarnings('ignore')
+
+app = Flask(__name__)
+
+# ---------------------------
+# Paths
+# ---------------------------
+MODEL_PATH = "model/crop_yield_model.pkl"
+ENCODERS_PATH = "model/label_encoders.pkl"
+METADATA_PATH = "model/model_metadata.json"
+
+model = None
+label_encoders = None
+metadata = None
+soil_data = {}
+
+# ---------------------------
+# Load Model
+# ---------------------------
+def load_model():
+    global model, label_encoders, metadata, soil_data
+
+    model = joblib.load(MODEL_PATH)
+    label_encoders = joblib.load(ENCODERS_PATH)
+
+    with open(METADATA_PATH) as f:
+        metadata = json.load(f)
+
+    with open("soil_nutrients_dataset.geojson") as f:
+        geojson = json.load(f)
+
+        for feature in geojson["features"]:
+            p = feature["properties"]
+            district = p["district"]
+
+            soil_data[district] = {
+                "N": float(p["N_percentage"]),
+                "P": float(p["P_percentage"]),
+                "K": float(p["K_percentage"]),
+                "OC": float(p["OC_percentage"]),
+                "pH": float(p["pH_percentage"]),
+                "EC": float(p["EC_percentage"]),
+                "S": float(p["S_percentage"]),
+                "Fe": float(p["Fe_percentage"]),
+                "Zn": float(p["Zn_percentage"]),
+                "Cu": float(p["Cu_percentage"]),
+                "B": float(p["B_percentage"]),
+                "Mn": float(p["Mn_percentage"]),
+            }
+
+    print("Model loaded successfully")
+
+# 🔴 IMPORTANT
 load_model()
 
 # ──────────────────────────────────────────────────────────
