@@ -1,13 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import pandas as pd
 import joblib
 import json
+import os
 import requests
-import warnings
-from flask import Flask, request, jsonify
 from flask_cors import CORS
-warnings.filterwarnings("ignore")
-
+import warnings
+warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 CORS(app)
@@ -59,9 +58,11 @@ def load_model():
                 }
 
         print("Model loaded successfully")
+        return True
 
     except Exception as e:
         print("Model loading failed:", e)
+        return False
 
 
 # Load model when server starts
@@ -120,26 +121,48 @@ def predict_yield(district, humidity, temperature, crop_type, soil_type):
 # API Routes
 # -------------------------
 
+def get_yield_range(prediction):
+    """Calculate the yielding range based on prediction."""
+    if metadata and "rf_mae" in metadata:
+        margin = metadata["rf_mae"]
+    else:
+        margin = prediction * 0.10 # Default 10% margin
+        
+    lower_bound = max(0.01, prediction - margin)
+    upper_bound = prediction + margin
+    return f"{lower_bound:.2f} to {upper_bound:.2f} (yielding range)"
+
 @app.route("/")
-def home():
-    return jsonify({
-        "message":"Crop Yield Prediction API",
-        "status":"running"
-    })
+def index():
+    return render_template("index.html")
+
+@app.route("/model-report")
+def model_report():
+    """Serve the ML training report dashboard."""
+    return render_template("model_report.html")
+
+@app.route("/api/metadata")
+def api_metadata():
+    if metadata:
+        return jsonify(metadata)
+    return jsonify({"error": "Metadata not loaded"}), 404
 
 
-@app.route("/api/health")
-def health():
-    return jsonify({
-        "status":"ok",
-        "model_loaded": model is not None
-    })
-
+@app.route("/api/weather", methods=["GET"])
+def api_weather():
+    """Get live weather data for a district."""
+    district = request.args.get("district", "")
+    if not district:
+        return jsonify({"error": "District parameter required"}), 400
+    weather, err = get_live_weather(district)
+    if err:
+        return jsonify({"error": err}), 200  # 200 so frontend can show the message
+    return jsonify(weather)
 
 @app.route("/api/predict", methods=["POST"])
 def api_predict():
 
-    data = request.get_json()
+    data = request.get_json(force=True)
 
     required = ["district","humidity","temperature","crop_type","soil_type"]
 
@@ -155,17 +178,32 @@ def api_predict():
         data["soil_type"]
     )
 
-    if error:
-        return jsonify({"error":error}),400
+    if prediction is None:
+        return jsonify({"error": error or "Unknown error"}), 400
+
+    accuracy_percent = round(metadata["rf_r2"] * 100, 2) if metadata and "rf_r2" in metadata else None
+    yield_range_str = get_yield_range(prediction)
 
     return jsonify({
-        "predicted_yield":prediction,
-        "unit":"Ton/Hectare"
+        "predicted_yield": prediction,
+        "yield_range": yield_range_str,
+        "unit": "Ton/Hectare",
+        "model_accuracy_percent": accuracy_percent
     })
 
+@app.route("/api/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "model_loaded": model is not None})
 
-# -------------------------
-# Run locally
-# -------------------------
+# ──────────────────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    loaded = load_model()
+    if not loaded:
+        print("\n⚠️  Model not found. Training now...")
+        import subprocess, sys
+        subprocess.run([sys.executable, "train_model.py"], check=True)
+        load_model()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
